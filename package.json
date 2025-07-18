@@ -19,12 +19,12 @@
     "vuex": "^3.6.2"
   },
   "devDependencies": {
-    "@vue/cli-plugin-babel": "^4.5.11",
-    "@vue/cli-plugin-vuex": "^4.5.11",
-    "@vue/cli-service": "^4.5.11",
+    "@vue/cli-plugin-babel": "^4.5.19",
+    "@vue/cli-plugin-vuex": "^4.5.19",
+    "@vue/cli-service": "^4.5.19",
     "babel-eslint": "^10.0.3",
-    "eslint": "^7.21.0",
-    "eslint-plugin-vue": "^7.7.0",
+    "eslint": "^8.57.0",
+    "eslint-plugin-vue": "^9.27.0",
     "faker": "^5.4.0",
     "lodash": "^4.17.21",
     "moment": "^2.29.1",
