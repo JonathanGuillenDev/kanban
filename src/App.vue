@@ -21,6 +21,7 @@ body {
     'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji',
     'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
 }
+
 .container {
   width: 100%;
   max-width: 1100px;
@@ -46,9 +47,16 @@ body {
   padding: .375rem .75rem;
   margin-right: 10px;
   margin-bottom: 5px;
-  font-size: 1rem;
-  line-height: 1.5;
+  font-size: .8rem;
+  line-height: 1.25;
   border-radius: .25rem;
   cursor: pointer;
 }
+
+@media (min-width: 769px) {
+  #container {
+    margin-left: 20%; /* Matches desktop width of sideNav */
+  }
+}
+
 </style>

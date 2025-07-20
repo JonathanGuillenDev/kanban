@@ -10,7 +10,6 @@
       >
         <div class="header">
           <h3>{{ card.title }}</h3>
-          <img :src="card.avatar" class="avatar" />
         </div>
         <div class="footer">
           <span class="date">{{ card.date }}</span>
@@ -52,12 +51,12 @@ export default {
 
 <style scoped>
 .board {
-  background-color: #f7fafc;
+  background-color: #919394;
   border-radius: 10px;
   padding: 0 20px 20px 20px;
 }
 .card {
-  background: #fff;
+  background: #e2e2e2;
   border-radius: 0.25rem;
   padding: 10px;
   border: 1px;

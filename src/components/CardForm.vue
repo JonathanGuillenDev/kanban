@@ -47,7 +47,6 @@ export default {
         description: "",
         status: "Planned",
         tag: "",
-        avatar: "",
         date: null
       },
       errorMsg: ""
@@ -61,7 +60,6 @@ export default {
         description: this.card.description,
         status: this.card.status,
         tag: this.card.tag,
-        avatar: "https://randomuser.me/api/portraits/lego/1.jpg",
         date: moment().format("MMM Do YYYY")
       };
 
@@ -80,7 +78,6 @@ export default {
       } else {
         // update
         newCard.id = this.cardID;
-        newCard.avatar = this.card.avatar;
         newCard.date = this.card.date;
         boardsService
           .updateCard(newCard)

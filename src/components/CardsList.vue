@@ -118,11 +118,11 @@ export default {
 .boards {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  grid-gap: 20px;
+  grid-gap: 15px;
 }
 .board-actions {
   text-align: center;
-  padding: 20px 0;
+  padding: 15px 0;
 }
 .board-actions a:link,
 .board-actions a:visited {

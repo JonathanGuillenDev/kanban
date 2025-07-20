@@ -21,6 +21,7 @@ export default {
   background-color: #f7fafc;
   border-radius: 10px;
   padding: 10px 20px 20px 20px;
+  font-size: 0.8em;
 }
 .comments h2 {
   margin: 0 0 30px 0;
