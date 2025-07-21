@@ -3,17 +3,17 @@
     <div class="status-message error" v-show="errorMsg !== ''">{{errorMsg}}</div>
     <div class="form-group">
       <label for="title">Title:</label>
-      <input id="title" type="text" class="form-control" v-model="card.title" autocomplete="off" />
+      <input id="title" type="text" class="form-control" v-model="card.title" autocomplete="off" required />
     </div>
     <div class="form-group">
       <label for="tag">Tag:</label>
-      <select id="tag" class="form-control" v-model="card.tag">
-        <option value="Feature Request">Feature Request</option>
+      <select id="tag" class="form-control" v-model="card.tag" required>
+        <option value="">-- Select Tag --</option> <option value="Feature Request">Feature Request</option>
         <option value="Design">Design</option>
         <option value="Q&A">Q&A</option>
       </select>
-      <label for="status">Status:</label>
-      <select id="tag" class="form-control" v-model="card.status">
+      <label for="cardStatus">Status:</label>
+      <select id="cardStatus" class="form-control" v-model="card.status" required>
         <option value="Planned">Planned</option>
         <option value="In Progress">In Progress</option>
         <option value="Completed">Completed</option>
@@ -23,14 +23,16 @@
       <label for="description">Description:</label>
       <textarea id="description" class="form-control" v-model="card.description"></textarea>
     </div>
-    <button class="btn btn-submit">Submit</button>
-    <button class="btn btn-cancel" v-on:click.prevent="cancelForm" type="cancel">Cancel</button>
-  </form>
+    <button class="btn btn-submit" :disabled="isLoading">
+      <span v-if="isLoading">Processing...</span>
+      <span v-else>Submit</span>
+    </button>
+    <button class="btn btn-cancel" v-on:click.prevent="cancelForm" type="button">Cancel</button> </form>
 </template>
 
 <script>
 import moment from "moment";
-import { mapActions, mapGetters } from 'vuex'; // Import mapActions and mapGetters
+import { mapActions, mapGetters } from 'vuex';
 
 export default {
   name: "card-form",
@@ -45,47 +47,69 @@ export default {
       card: {
         title: "",
         description: "",
-        status: "Planned",
-        tag: "",
-        date: null
+        status: "Planned", // Default status
+        tag: "", // Default tag
+        date: null,
+        // When adding, boardId will be part of the payload, not directly on 'card' initially
+        // When editing, boardId will come from existing card, and we add it back.
       },
+      isLoading: false, // Added loading state
       errorMsg: ""
     };
   },
   methods: {
-    ...mapActions(['addNewCard', 'updateExistingCard', 'fetchCardDetail']), // Map actions
+    ...mapActions(['addNewCard', 'updateExistingCard', 'fetchCardDetail']),
 
     async submitForm() {
-      const cardData = {
-        boardId: Number(this.$route.params.boardID),
+      this.isLoading = true; // Set loading to true
+      this.errorMsg = ""; // Clear previous errors
+
+      // Ensure boardId is available
+      const boardId = Number(this.$route.params.boardID);
+      if (isNaN(boardId) || boardId === 0) {
+        this.errorMsg = "Invalid Board ID. Cannot process card.";
+        this.isLoading = false;
+        return;
+      }
+
+      // Prepare the base card object from local data
+      const cardToProcess = {
         title: this.card.title,
         description: this.card.description,
         status: this.card.status,
         tag: this.card.tag,
       };
 
-      if (this.cardID === 0) {
-        // Add new card
-        cardData.date = moment().format("MMM Do YYYY");
+      if (this.cardID === 0) { // Adding a new card
+        cardToProcess.date = moment().format("MMM Do YYYY");
+
         try {
-          const response = await this.addNewCard(cardData);
-          if (response.status === 201) {
-            this.$router.push(`/board/${cardData.boardId}`);
-          }
+          // FIX: Pass the payload in the format expected by addNewCard action
+          await this.addNewCard({
+            boardId: boardId,
+            card: cardToProcess // Pass the card object nested under 'card'
+          });
+          // FIX: No response.status check needed for local store actions
+          this.$router.push(`/board/${boardId}`);
         } catch (error) {
           this.handleErrorResponse(error, "adding");
+        } finally {
+          this.isLoading = false;
         }
-      } else {
-        // Update existing card
-        cardData.id = this.cardID;
-        cardData.date = this.card.date; // Preserve original date for updates
+      } else { // Updating an existing card
+        cardToProcess.id = this.cardID;
+        cardToProcess.boardId = boardId; // Ensure boardId is part of the card for updates
+        cardToProcess.date = this.card.date; // Preserve original date for updates
+
         try {
-          const response = await this.updateExistingCard(cardData);
-          if (response.status === 200) {
-            this.$router.push(`/board/${cardData.boardId}`);
-          }
+          // FIX: Pass the updated card data directly
+          await this.updateExistingCard(cardToProcess);
+          // FIX: No response.status check needed for local store actions
+          this.$router.push(`/board/${boardId}`);
         } catch (error) {
           this.handleErrorResponse(error, "updating");
+        } finally {
+          this.isLoading = false;
         }
       }
     },
@@ -93,7 +117,10 @@ export default {
       this.$router.push(`/board/${this.$route.params.boardID}`);
     },
     handleErrorResponse(error, verb) {
-      if (error.response) {
+      // FIX: Adjust error message for local store errors
+      if (error.message) { // Check for a specific error message from the store action
+          this.errorMsg = `Error ${verb} card: ${error.message}`;
+      } else if (error.response) {
         this.errorMsg = `Error ${verb} card. Response received was '${error.response.statusText}'.`;
       } else if (error.request) {
         this.errorMsg = `Error ${verb} card. Server could not be reached.`;
@@ -104,18 +131,32 @@ export default {
     }
   },
   async created() {
-    if (this.cardID !== 0) {
+    // FIX: Populate tag with a default if not already set, or if coming from a new card
+    if (this.card.tag === "") {
+        this.card.tag = "Feature Request"; // Set a default tag
+    }
+
+    if (this.cardID !== 0) { // If editing an existing card
       try {
-        // Fetch card detail into the store
         await this.fetchCardDetail(this.cardID);
-        // Populate local card data from the store's currentCard
-        this.card = { ...this.currentCard }; // Use spread to create a copy, not a reference
-      } catch (error) {
-        if (error.response && error.response.status === 404) {
-          alert("Card not available. This card may have been deleted or you have entered an invalid card ID.");
-          this.$router.push("/");
+        // FIX: Ensure currentCard is not null before spreading
+        if (this.currentCard) {
+          this.card = { ...this.currentCard }; // Use spread to create a copy, not a reference
         } else {
-            this.handleErrorResponse(error, "retrieving");
+          // This case means fetchCardDetail committed null, handle it
+          this.errorMsg = "Could not retrieve card details for editing.";
+          // Optionally redirect
+          // this.$router.push(`/board/${this.$route.params.boardID}`);
+        }
+      } catch (error) {
+        // The fetchCardDetail action now throws an error if card not found
+        // So this catch block should handle it directly.
+        // No need for error.response.status === 404 check if store handles it.
+        this.handleErrorResponse(error, "retrieving");
+        // Redirect if card not found or serious error
+        if (error.message === 'Card not found') {
+            alert("Card not available. This card may have been deleted or you have entered an invalid card ID.");
+            this.$router.push("/");
         }
       }
     }
@@ -123,17 +164,22 @@ export default {
   computed: {
       ...mapGetters(['currentCard']) // Get the current card from the store
   },
-  // If you need to react to currentCard changing after initial load (e.g., if another component updates it)
   watch: {
+    // Watch currentCard from the store. This is useful if the card
+    // could be updated by another action while this form is open.
     currentCard: {
       handler(newCard) {
-        // Update local card data if the store's currentCard changes, but only if it's not empty
-        if (newCard && Object.keys(newCard).length > 0 && this.cardID !== 0) {
-            this.card = { ...newCard };
+        // Only update local 'card' if we are in edit mode (cardID is not 0)
+        // AND the newCard from the store is actually a card object (not null/empty)
+        if (this.cardID !== 0 && newCard && Object.keys(newCard).length > 0) {
+          // Merge to ensure we don't overwrite user changes if they're typing
+          // but also ensure data from store populates.
+          // For simplicity, just overwrite if you want the store to be the source of truth.
+          this.card = { ...newCard };
         }
       },
-      deep: true, // Watch for nested changes
-      immediate: true // Run handler immediately with the current value
+      deep: true,
+      immediate: false // No need for immediate as created() handles initial load
     }
   }
 };
