@@ -1,21 +1,24 @@
 <template>
   <div>
     <div class="header">
-      <h1>{{ title }}</h1>
+      <h1>{{ boardTitle }}</h1>
       <router-link
-        tag="button"
-        class="btn addNewCard"
         :to="{ name: 'AddCard', params: {boardID: this.boardId} }"
+        custom
+        v-slot="{ navigate }"
         v-if="!isLoading"
-      >Add New Card</router-link>
+      >
+        <button @click="navigate" role="link" class="btn addNewCard">Add New Card</button>
+      </router-link>
+
       <button
         class="btn btn-cancel deleteBoard"
         v-if="!isLoading"
-        v-on:click="deleteBoardConfirmed"
+        @click="deleteBoardConfirmed"
       >Delete Board</button>
     </div>
     <div class="loading" v-if="isLoading">
-      <img src="../assets/ping_pong_loader.gif" />
+      <img src="../assets/ping_pong_loader.gif" alt="Loading..." />
     </div>
     <div v-else>
       <div class="status-message error" v-show="errorMsg !== ''">{{errorMsg}}</div>
@@ -33,7 +36,7 @@
 
 <script>
 import BoardColumn from "@/components/BoardColumn";
-import { mapGetters, mapActions } from 'vuex'; // Import mapGetters and mapActions
+import { mapGetters, mapActions } from 'vuex';
 
 export default {
   name: "cards-list",
@@ -42,7 +45,8 @@ export default {
   },
   data() {
     return {
-      title: "", // Title can still be local if only used here
+      // FIX: 'title' data property is no longer needed if boardTitle is derived from Vuex
+      // title: "",
       boardId: 0,
       isLoading: true,
       errorMsg: ""
@@ -55,27 +59,24 @@ export default {
       this.isLoading = true;
       this.errorMsg = "";
       try {
-        // You'll need to fetch the board title separately or include it in your getCards response
-        // For now, let's assume `getCards` (or a separate `getBoard` call) provides the title.
-        // If your getCards endpoint returns { title: "Board Name", cards: [...] }
-        const response = await this.$services.boardsService.getCards(this.boardId); // Using local service for initial title fetch if not in store
-        this.title = response.data.title;
-
-        // Now dispatch the action to fetch cards for this board into the store
+        // FIX: Remove the backend service call.
+        // The board title will now come from a computed property using Vuex state.
+        // We only need to dispatch fetchBoardCards to populate boardCards state.
         await this.fetchBoardCards(this.boardId);
-      } catch (error) {
-        if (error.response && error.response.status === 404) {
-          alert("Board cards not available. This board may have been deleted or you have entered an invalid board ID.");
-          this.$router.push("/");
-        } else {
-          if (error.response) {
-            this.errorMsg = `Error retrieving cards. Response was ${error.response.statusText}`;
-          } else if (error.request) {
-            this.errorMsg = "Error retrieving cards. Server couldn't be reached.";
-          } else {
-            this.errorMsg = "Error retrieving cards. Request could not be created.";
-          }
+
+        // FIX: Check if the board itself exists in the store
+        if (!this.currentBoard) {
+            this.errorMsg = "Board not found. It may have been deleted or you have entered an invalid board ID.";
+            alert(this.errorMsg);
+            this.$router.push("/");
+            return; // Stop execution if board not found
         }
+
+      } catch (error) {
+        // This catch block might still trigger if fetchBoardCards has an issue
+        // (though less likely with local data).
+        console.error("Error in retrieveCards (CardsList.vue):", error);
+        this.errorMsg = "Error retrieving board details or cards. Please try again.";
       } finally {
         this.isLoading = false;
       }
@@ -83,39 +84,46 @@ export default {
     async deleteBoardConfirmed() {
       if (confirm("Deleting this board deletes all cards. There's no undo. Are you sure?")){
         try {
-          const response = await this.deleteBoard(this.boardId);
-          if (response.status === 200) {
-            alert("Board successfully deleted.");
-            this.$router.push("/");
-          }
+          // No need to check for response.status === 200, as Vuex action directly modifies state
+          await this.deleteBoard(this.boardId);
+          alert("Board successfully deleted.");
+          this.$router.push("/");
         } catch (error) {
-          if (error.response){
-            this.errorMsg = "Error deleting board. Response was "+error.response.statusText;
-          } else if (error.request){
-            this.errorMsg = "Error deleting board. Server couldn't be reached."
-          }
-          else {
-            this.errorMsg = "Error deleting board. Request could not be created."
-          }
+          // This catch is mostly for errors within the Vuex action itself (e.g., if boardId is invalid internally)
+          this.errorMsg = "Error deleting board locally. See console for details.";
+          console.error("Error deleting board:", error);
         }
       }
     }
   },
   created() {
     this.boardId = Number(this.$route.params.id); // Ensure boardId is a number
-    this.retrieveCards();
+    // FIX: Add watcher for route ID changes
+    // Initial fetch is handled by immediate: true in the watcher
+    // If you prefer to keep created, make immediate: false in watcher and uncomment this:
+    // this.retrieveCards();
+  },
+  // FIX: Watch for changes in the route's boardID
+  watch: {
+    '$route.params.id': {
+      immediate: true, // Run immediately on component creation
+      handler(newBoardId) {
+        if (newBoardId) { // Only run if newBoardId is defined
+          this.boardId = Number(newBoardId);
+          this.retrieveCards();
+        }
+      }
+    }
   },
   computed: {
-    ...mapGetters(['getCardsForBoard']), // Map the getter to retrieve cards for the current board
-    // Filter the cards obtained from the getter
-    planned() {
-      return this.getCardsForBoard(this.boardId).filter(card => card.status === "Planned");
+    ...mapGetters(['allBoards']), // Map allBoards getter from store
+    // FIX: Get the current board from the store based on boardId
+    currentBoard() {
+      return this.allBoards.find(board => board.id === this.boardId);
     },
-    inProgress() {
-      return this.getCardsForBoard(this.boardId).filter(card => card.status === "In Progress");
-    },
-    completed() {
-      return this.getCardsForBoard(this.boardId).filter(card => card.status === "Completed");
+    // FIX: Derive boardTitle from currentBoard
+    boardTitle() {
+      return this.currentBoard ? this.currentBoard.title : 'Loading Board...';
     }
   }
 };

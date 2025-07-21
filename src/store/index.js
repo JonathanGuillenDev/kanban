@@ -1,8 +1,8 @@
 // src/store/index.js
 import Vue from 'vue';
 import Vuex from 'vuex';
-import { initialKanbanData } from '@/db/initialKanbanData'; // This import belongs HERE!
-import BoardService from '@/services/BoardService'; // Ensure this path is correct if you're keeping the service
+import { initialKanbanData } from '../db/initialKanbanData.js'; // FIX: Corrected import path
+// REMOVED: import BoardService from '@/services/BoardService'; // No longer needed for Option A
 
 Vue.use(Vuex);
 
@@ -37,9 +37,7 @@ export default new Vuex.Store({
       state.boards = state.boards.filter((board) => {
         return board.id !== boardIdToDelete;
       });
-      // Also delete associated cards when a board is deleted
       state.allCards = state.allCards.filter(card => card.boardId !== boardIdToDelete);
-      // Clear boardCards if the deleted board was the current one
       if (state.boardCards.length > 0 && state.boardCards[0].boardId === boardIdToDelete) {
         state.boardCards = [];
       }
@@ -51,128 +49,78 @@ export default new Vuex.Store({
       state.boardsError = error;
     },
     ADD_NEW_BOARD(state, newBoard) {
-      // Find the max ID across boards and cards to generate a truly unique ID
       const maxBoardId = state.boards.reduce((max, board) => Math.max(max, board.id), 0);
       const maxCardId = state.allCards.reduce((max, card) => Math.max(max, card.id), 0);
-      newBoard.id = Math.max(maxBoardId, maxCardId) + 1; // Ensure a unique ID
+      newBoard.id = Math.max(maxBoardId, maxCardId) + 1;
       state.boards.push(newBoard);
     },
-    ADD_NEW_CARD(state, newCard) { // New mutation to add a new card
+    ADD_NEW_CARD(state, newCard) {
       const maxBoardId = state.boards.reduce((max, board) => Math.max(max, board.id), 0);
       const maxCardId = state.allCards.reduce((max, card) => Math.max(max, card.id), 0);
-      newCard.id = Math.max(maxBoardId, maxCardId) + 1; // Ensure a unique ID
+      newCard.id = Math.max(maxBoardId, maxCardId) + 1;
       state.allCards.push(newCard);
     },
     UPDATE_CARD_IN_BOARD(state, updatedCard) {
-        // Find the card in boardCards and update it
-        const indexInBoardCards = state.boardCards.findIndex(card => card.id === updatedCard.id);
-        if (indexInBoardCards !== -1) {
-            state.boardCards.splice(indexInBoardCards, 1, updatedCard);
+        // Find and update in allCards
+        const allCardsIndex = state.allCards.findIndex(card => card.id === updatedCard.id);
+        if (allCardsIndex !== -1) {
+            state.allCards.splice(allCardsIndex, 1, updatedCard);
         }
-
-        // Also update the card within the specific board in the 'boards' array
-        state.boards.forEach(board => {
-            if (board.id === updatedCard.boardId && board.cards) {
-                const indexInBoard = board.cards.findIndex(card => card.id === updatedCard.id);
-                if (indexInBoard !== -1) {
-                    board.cards.splice(indexInBoard, 1, updatedCard);
-                }
-            }
-        });
+        // Update in boardCards if it's the currently displayed board
+        const boardCardsIndex = state.boardCards.findIndex(card => card.id === updatedCard.id);
+        if (boardCardsIndex !== -1) {
+            state.boardCards.splice(boardCardsIndex, 1, updatedCard);
+        }
     },
     DELETE_CARD_FROM_BOARD(state, { boardId, cardId }) {
-        // Filter out the deleted card from boardCards
+        // Filter out from allCards
+        state.allCards = state.allCards.filter(card => card.id !== cardId);
+        // Filter out from boardCards if it's the currently displayed board
         state.boardCards = state.boardCards.filter(card => card.id !== cardId);
-
-        // Filter out the deleted card from the specific board in the 'boards' array
-        state.boards.forEach(board => {
-            if (board.id === boardId && board.cards) {
-                board.cards = board.cards.filter(card => card.id !== cardId);
-            }
-        });
     },
   },
   actions: {
+    // FIX: This action now directly uses initialKanbanData
     async fetchKanbanData({ commit }) {
       commit('SET_LOADING_BOARDS', true);
       commit('SET_BOARDS_ERROR', null);
       try {
-        // If you are still using BoardService for initial data, keep this:
-        const response = await BoardService.getBoards(); // Assuming getBoards returns { boards: [...], cards: [...] }
-        commit('SET_BOARDS', response.data.boards);
-        commit('SET_ALL_CARDS', response.data.cards);
-        // If you are embedding the data directly:
-        // commit('SET_BOARDS', initialKanbanData.boards);
-        // commit('SET_ALL_CARDS', initialKanbanData.cards);
+        // Directly commit data from initialKanbanData
+        commit('SET_BOARDS', initialKanbanData.boards);
+        commit('SET_ALL_CARDS', initialKanbanData.cards);
+        console.log("Kanban data loaded successfully from initialKanbanData:", initialKanbanData.boards, initialKanbanData.cards); // Added console log
       } catch (error) {
-        commit('SET_BOARDS_ERROR', 'Error loading boards.');
-        console.error("Error fetching boards:", error);
+        console.error("Error loading Kanban data from initialKanbanData:", error);
+        commit('SET_BOARDS_ERROR', 'Failed to load Kanban data from local source.');
       } finally {
         commit('SET_LOADING_BOARDS', false);
       }
     },
-    async addBoard({ commit }, newBoard) {
-        try {
-            const response = await BoardService.addBoard(newBoard);
-            if (response.status === 201) {
-                commit('ADD_NEW_BOARD', response.data); // Assuming API returns the new board with ID
-            }
-        } catch (error) {
-            console.error("Error adding board:", error);
-            throw error;
-        }
+
+    // FIX: These actions now directly commit mutations without BoardService
+    addBoard({ commit }, newBoard) {
+      commit('ADD_NEW_BOARD', newBoard);
+      console.log("New board added locally:", newBoard);
     },
-    async addCard({ commit }, newCardData) {
-        try {
-            const response = await BoardService.addCard(newCardData);
-            if (response.status === 201) {
-                commit('ADD_NEW_CARD', response.data); // Assuming API returns the new card with ID
-            }
-            return response;
-        } catch (error) {
-            console.error("Error adding new card:", error);
-            throw error;
-        }
+    addCard({ commit }, newCardData) {
+      commit('ADD_NEW_CARD', newCardData);
+      console.log("New card added locally:", newCardData);
     },
-    async updateExistingCard({ commit }, updatedCardData) {
-        try {
-            const response = await BoardService.updateCard(updatedCardData);
-            if (response.status === 200) {
-                commit('UPDATE_CARD_IN_BOARD', response.data);
-            }
-            return response;
-        } catch (error) {
-            console.error("Error updating card:", error);
-            throw error;
-        }
+    updateExistingCard({ commit }, updatedCardData) {
+      commit('UPDATE_CARD_IN_BOARD', updatedCardData);
+      console.log("Card updated locally:", updatedCardData);
     },
-    async deleteExistingCard({ commit }, { cardId, boardId }) {
-        try {
-            const response = await BoardService.deleteCard(cardId);
-            if (response.status === 200) {
-                commit('DELETE_CARD_FROM_BOARD', { boardId, cardId });
-            }
-            return response;
-        } catch (error) {
-            console.error("Error deleting card:", error);
-            throw error;
-        }
+    deleteExistingCard({ commit }, { cardId, boardId }) {
+      commit('DELETE_CARD_FROM_BOARD', { boardId, cardId });
+      console.log(`Card ${cardId} deleted locally from board ${boardId}.`);
     },
-    async deleteBoard({ commit }, boardId) {
-        try {
-            const response = await BoardService.deleteBoard(boardId);
-            if (response.status === 200) {
-                commit('DELETE_BOARD', boardId);
-            }
-            return response;
-        } catch (error) {
-            console.error("Error deleting board:", error);
-            throw error;
-        }
+    deleteBoard({ commit }, boardId) {
+      commit('DELETE_BOARD', boardId);
+      console.log(`Board ${boardId} deleted locally.`);
     },
+
     // Action to fetch cards for a specific board (called from CardsList.vue)
     fetchBoardCards({ commit, state }, boardId) {
-        // This action now filters from `allCards` already in the store
         const cardsForBoard = state.allCards.filter(card => card.boardId === boardId);
         commit('SET_BOARD_CARDS', cardsForBoard);
     },
@@ -180,14 +128,14 @@ export default new Vuex.Store({
     fetchCardDetail({ commit, state }, cardId) {
         const card = state.allCards.find(c => c.id === cardId);
         if (card) {
-            // Filter comments for this card from initialKanbanData.comments if available
-            const cardComments = initialKanbanData.comments.filter(comment => comment.cardId === cardId);
+            // Ensure initialKanbanData.comments exists before filtering
+            const cardComments = initialKanbanData.comments ? initialKanbanData.comments.filter(comment => comment.cardId === cardId) : [];
             const cardWithComments = { ...card, comments: cardComments };
             commit('SET_CURRENT_CARD', cardWithComments);
         } else {
             console.warn(`Card with ID ${cardId} not found.`);
             commit('SET_CURRENT_CARD', null);
-            throw new Error('Card not found'); // Throw an error to be caught by component
+            throw new Error('Card not found');
         }
     }
   },
@@ -195,10 +143,8 @@ export default new Vuex.Store({
     allBoards: state => state.boards,
     isLoadingBoards: state => state.isLoadingBoards,
     boardsError: state => state.boardsError,
-    currentCard: state => state.currentCard,
-    // Getter to retrieve cards for a specific board ID
+    currentCard: state => state.card,
     getCardsForBoard: (state) => (boardId) => {
-        // This getter now works with `allCards` which is populated on initial `fetchKanbanData`
         return state.allCards.filter(card => card.boardId === boardId);
     }
   },

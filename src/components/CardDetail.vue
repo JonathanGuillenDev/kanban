@@ -3,17 +3,29 @@
     <div class="loading" v-if="isLoading">
       <img src="../assets/ping_pong_loader.gif" alt="Loading..." />
     </div>
-    <div v-else>
+
+    <div v-else-if="currentCard">
       <h1>{{ currentCard.title }}</h1>
-      <p>{{ currentCard.description }}</p>
+      <p>Description: {{ currentCard.description }}</p>
+      <p>Status: {{ currentCard.status }}</p>
+
       <router-link
-        tag="button"
         :to="{ name: 'EditCard', params: { cardID: $route.params.cardID } }"
-        class="btn editCard"
-      >Edit Card</router-link>
-      <button class="btn deleteCard" v-on:click="showDeleteConfirm = true">Delete Card</button>
+        custom
+        v-slot="{ navigate }"
+      >
+        <button @click="navigate" role="link" class="btn editCard">Edit Card</button>
+      </router-link>
+
+      <button class="btn deleteCard" @click="showDeleteConfirm = true">Delete Card</button>
       <div class="status-message error" v-show="errorMsg !== ''">{{ errorMsg }}</div>
-      <comments-list :comments="currentCard.comments" />
+
+      <comments-list :comments="currentCard.comments || []" />
+    </div>
+
+    <div v-else>
+      <p v-if="errorMsg">{{ errorMsg }}</p>
+      <p v-else>Card not found or an unexpected error occurred.</p>
     </div>
 
     <div class="board-actions" v-if="!isLoading">
@@ -39,7 +51,7 @@
 
 <script>
 import CommentsList from "@/components/CommentsList";
-import { mapGetters, mapActions } from 'vuex'; // Import mapGetters and mapActions
+import { mapGetters, mapActions } from 'vuex';
 
 export default {
   name: "card-detail",
@@ -56,20 +68,34 @@ export default {
     };
   },
   methods: {
-    ...mapActions(['fetchCardDetail', 'deleteExistingCard']), // Map actions
+    ...mapActions(['fetchCardDetail', 'deleteExistingCard']),
 
     async retrieveCard() {
       this.isLoading = true;
       this.errorMsg = "";
       try {
-        await this.fetchCardDetail(this.$route.params.cardID);
-      } catch (error) {
-        if (error.response && error.response.status === 404) {
-          this.showAlertMessage("Card not available. This card may have been deleted or you have entered an invalid card ID.");
-          this.$router.push("/");
-        } else {
-          this.handleError(error, "Error retrieving card.");
+        // Ensure cardID is parsed as an integer if your IDs are numbers
+        const cardId = parseInt(this.$route.params.cardID);
+        if (isNaN(cardId)) {
+          throw new Error("Invalid card ID provided in route.");
         }
+        await this.fetchCardDetail(cardId); // Pass the numeric ID
+
+        // After fetching, if currentCard is null, it means it wasn't found
+        if (!this.currentCard) {
+          // This case is already handled by the error throw in Vuex action
+          // but we can add a specific message if needed for clarity.
+          this.errorMsg = "Card not found. It may have been deleted or the ID is invalid.";
+          this.showAlertMessage(this.errorMsg); // Optionally show an alert too
+          this.$router.push("/"); // Redirect if card not found
+        }
+
+      } catch (error) {
+        // Your current error handling from the store is good
+        // The 'Card not found' error from the store will be caught here
+        this.handleError(error, "Error retrieving card details.");
+        // Redirect to home or boards list if a non-recoverable error (like card not found) occurs
+        this.$router.push("/");
       } finally {
         this.isLoading = false;
       }
@@ -77,14 +103,13 @@ export default {
     async deleteCardConfirmed() {
       this.showDeleteConfirm = false; // Close the confirmation modal
       try {
-        const response = await this.deleteExistingCard({
+        await this.deleteExistingCard({
           cardId: this.currentCard.id,
           boardId: this.currentCard.boardId
         });
-        if (response.status === 200) {
-          this.showAlertMessage("Card successfully deleted");
-          this.$router.push(`/board/${this.currentCard.boardId}`);
-        }
+        // Success: Redirect back to the board
+        this.showAlertMessage("Card successfully deleted.");
+        this.$router.push(`/board/${this.currentCard.boardId}`);
       } catch (error) {
         this.handleError(error, "Error deleting card.");
       }
@@ -94,12 +119,14 @@ export default {
       this.showAlert = true;
     },
     handleError(error, message) {
-      if (error.response) {
+      if (error.message === "Card not found") { // Check for the specific error from your Vuex action
+        this.errorMsg = "Card not found. This card may have been deleted or you have entered an invalid ID.";
+      } else if (error.response) {
         this.errorMsg = `${message} Response received was '${error.response.statusText}'.`;
       } else if (error.request) {
         this.errorMsg = `${message} Server could not be reached.`;
       } else {
-        this.errorMsg = `${message} Request could not be created.`;
+        this.errorMsg = `${message} Request could not be created. Error: ${error.message}`; // Added error.message here
       }
       console.error(error);
     }
@@ -107,14 +134,25 @@ export default {
   created() {
     this.retrieveCard();
   },
+  // FIX 3: Add a watcher to re-fetch card details if the route's cardID changes
+  watch: {
+    '$route.params.cardID': {
+      handler(newCardId, oldCardId) {
+        if (newCardId !== oldCardId) {
+          this.retrieveCard();
+        }
+      },
+      immediate: false // No need to run on creation if 'created' hook handles initial fetch
+    }
+  },
   computed: {
-    ...mapGetters(['currentCard']) // Map the currentCard getter
+    ...mapGetters(['currentCard'])
   }
 };
 </script>
 
 <style scoped>
-/* Styles remain the same */
+/* Your existing styles remain the same */
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -125,7 +163,7 @@ export default {
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 2000; /* Ensure it's on top of everything */
+  z-index: 2000;
 }
 
 .modal-content {
@@ -152,7 +190,7 @@ export default {
 }
 
 .modal-content .btn-confirm {
-  background-color: #dc3545; /* Red for delete confirmation */
+  background-color: #dc3545;
   color: white;
 }
 
@@ -161,7 +199,7 @@ export default {
 }
 
 .modal-content .btn-cancel {
-  background-color: #6c757d; /* Grey for cancel */
+  background-color: #6c757d;
   color: white;
 }
 
@@ -169,7 +207,6 @@ export default {
   background-color: #5a6268;
 }
 
-/* Existing styles for the card details */
 .loading {
   text-align: center;
   padding: 50px;
