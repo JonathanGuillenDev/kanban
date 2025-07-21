@@ -4,8 +4,7 @@
     <div class="cards">
       <div
         class="card"
-        v-for="card in cards"
-        v-bind:key="card.id"
+        v-for="card in cardsForThisColumn" v-bind:key="card.id"
         v-on:click="viewCardDetails(card.id)"
       >
         <div class="header">
@@ -23,9 +22,19 @@
 </template>
 
 <script>
+import { mapGetters } from 'vuex';
+
 export default {
   name: 'board-column',
-  props: ['title', 'cards', 'boardID'],
+  props: ['title', 'boardID', 'columnStatus'],
+  computed: {
+    ...mapGetters(['getCardsForBoard']), // Map the getter
+    cardsForThisColumn() {
+      // Filter cards from the store based on boardID and columnStatus
+      // Note: getCardsForBoard already gives you cards for the specific board
+      return this.getCardsForBoard(this.boardID).filter(card => card.status === this.columnStatus);
+    }
+  },
   methods: {
     viewCardDetails(cardID) {
       this.$router.push(`/board/${this.boardID}/card/${cardID}`);
@@ -42,6 +51,8 @@ export default {
         case 'Q&A':
           clazz = 'qa';
           break;
+        default:
+          clazz = 'default-tag';
       }
       return clazz;
     }
@@ -50,6 +61,7 @@ export default {
 </script>
 
 <style scoped>
+/* Styles remain the same */
 .board {
   background-color: #919394;
   border-radius: 10px;
@@ -104,5 +116,10 @@ export default {
 .feature {
   background-color: #e6fffa;
   color: #2c7a7b;
+}
+/* Optional: Add a default tag style */
+.default-tag {
+  background-color: #e2e8f0; /* Light gray */
+  color: #4a5568; /* Darker gray text */
 }
 </style>

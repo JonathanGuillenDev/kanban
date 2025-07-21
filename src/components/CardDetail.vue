@@ -4,8 +4,8 @@
       <img src="../assets/ping_pong_loader.gif" alt="Loading..." />
     </div>
     <div v-else>
-      <h1>{{ card.title }}</h1>
-      <p>{{ card.description }}</p>
+      <h1>{{ currentCard.title }}</h1>
+      <p>{{ currentCard.description }}</p>
       <router-link
         tag="button"
         :to="{ name: 'EditCard', params: { cardID: $route.params.cardID } }"
@@ -13,14 +13,13 @@
       >Edit Card</router-link>
       <button class="btn deleteCard" v-on:click="showDeleteConfirm = true">Delete Card</button>
       <div class="status-message error" v-show="errorMsg !== ''">{{ errorMsg }}</div>
-      <comments-list :comments="card.comments" />
+      <comments-list :comments="currentCard.comments" />
     </div>
 
     <div class="board-actions" v-if="!isLoading">
       <router-link :to="{ name: 'Board', params: { id: $route.params.boardID } }">Back to Board</router-link>
     </div>
 
-    <!-- Custom Alert Modal -->
     <div class="modal-overlay" v-if="showAlert">
       <div class="modal-content">
         <p>{{ alertMessage }}</p>
@@ -28,7 +27,6 @@
       </div>
     </div>
 
-    <!-- Custom Confirmation Modal -->
     <div class="modal-overlay" v-if="showDeleteConfirm">
       <div class="modal-content">
         <p>Are you sure you want to delete this card? This action cannot be undone.</p>
@@ -40,8 +38,8 @@
 </template>
 
 <script>
-import boardsService from "../services/BoardService";
 import CommentsList from "@/components/CommentsList";
+import { mapGetters, mapActions } from 'vuex'; // Import mapGetters and mapActions
 
 export default {
   name: "card-detail",
@@ -52,68 +50,44 @@ export default {
     return {
       isLoading: true,
       errorMsg: "",
-      showAlert: false, // For custom alerts
+      showAlert: false,
       alertMessage: "",
-      showDeleteConfirm: false, // For custom confirmation
+      showDeleteConfirm: false,
     };
   },
   methods: {
-    retrieveCard() {
-      boardsService
-        .getCard(this.$route.params.cardID)
-        .then(response => {
-          // --- DEBUGGING STEP: INSPECT INCOMING DATA ---
-          console.log("Raw card data from API:", response.data);
-          console.log("Raw comments data:", response.data.comments);
+    ...mapActions(['fetchCardDetail', 'deleteExistingCard']), // Map actions
 
-          // --- CLIENT-SIDE DEDUPLICATION (WORKAROUND) ---
-          let processedComments = [];
-          if (response.data.comments) {
-            const seenCommentIds = new Set();
-            processedComments = response.data.comments.filter(comment => {
-              if (seenCommentIds.has(comment.id)) {
-                console.warn(`Duplicate comment ID detected and filtered: ${comment.id}`);
-                return false; // Filter out duplicates
-              }
-              seenCommentIds.add(comment.id);
-              return true;
-            });
-          }
-
-          // Create a new card object with deduplicated comments
-          const cardWithUniqueComments = {
-            ...response.data,
-            comments: processedComments
-          };
-
-          this.$store.commit("SET_CURRENT_CARD", cardWithUniqueComments);
-          this.isLoading = false;
-        })
-        .catch(error => {
-          if (error.response && error.response.status === 404) {
-            this.showAlertMessage(
-              "Card not available. This card may have been deleted or you have entered an invalid card ID."
-            );
-            this.$router.push("/");
-          } else {
-            this.handleError(error, "Error retrieving card.");
-          }
-          this.isLoading = false; // Ensure loading state is reset even on error
-        });
+    async retrieveCard() {
+      this.isLoading = true;
+      this.errorMsg = "";
+      try {
+        await this.fetchCardDetail(this.$route.params.cardID);
+      } catch (error) {
+        if (error.response && error.response.status === 404) {
+          this.showAlertMessage("Card not available. This card may have been deleted or you have entered an invalid card ID.");
+          this.$router.push("/");
+        } else {
+          this.handleError(error, "Error retrieving card.");
+        }
+      } finally {
+        this.isLoading = false;
+      }
     },
-    deleteCardConfirmed() {
+    async deleteCardConfirmed() {
       this.showDeleteConfirm = false; // Close the confirmation modal
-      boardsService
-        .deleteCard(this.card.id)
-        .then(response => {
-          if (response.status === 200) {
-            this.showAlertMessage("Card successfully deleted");
-            this.$router.push(`/board/${this.card.boardId}`);
-          }
-        })
-        .catch(error => {
-          this.handleError(error, "Error deleting card.");
+      try {
+        const response = await this.deleteExistingCard({
+          cardId: this.currentCard.id,
+          boardId: this.currentCard.boardId
         });
+        if (response.status === 200) {
+          this.showAlertMessage("Card successfully deleted");
+          this.$router.push(`/board/${this.currentCard.boardId}`);
+        }
+      } catch (error) {
+        this.handleError(error, "Error deleting card.");
+      }
     },
     showAlertMessage(message) {
       this.alertMessage = message;
@@ -121,29 +95,26 @@ export default {
     },
     handleError(error, message) {
       if (error.response) {
-        this.errorMsg =
-          `${message} Response received was '${error.response.statusText}'.`;
+        this.errorMsg = `${message} Response received was '${error.response.statusText}'.`;
       } else if (error.request) {
         this.errorMsg = `${message} Server could not be reached.`;
       } else {
         this.errorMsg = `${message} Request could not be created.`;
       }
-      console.error(error); // Log the full error for debugging
+      console.error(error);
     }
   },
   created() {
     this.retrieveCard();
   },
   computed: {
-    card() {
-      return this.$store.state.card;
-    }
+    ...mapGetters(['currentCard']) // Map the currentCard getter
   }
 };
 </script>
 
 <style scoped>
-/* Styles for custom modals */
+/* Styles remain the same */
 .modal-overlay {
   position: fixed;
   top: 0;
